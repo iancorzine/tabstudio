@@ -295,15 +295,12 @@ export class Recorder {
     if (dir) {
       const fh = await dir.getFileHandle(finalName, { create: true });
       const writable = await fh.createWritable();
-      try {
-        if (standardMp4) {
-          await Recorder.remux(file, new StreamTarget(writable, { chunked: true }), events);
-        } else {
-          events.progress(null, 'Copying file');
-          await file.stream().pipeTo(writable, { preventClose: true });
-        }
-      } finally {
-        await writable.close();
+      if (standardMp4) {
+        // The conversion closes the stream itself when it finishes, which commits the file.
+        await Recorder.remux(file, new StreamTarget(writable, { chunked: true }), events);
+      } else {
+        events.progress(null, 'Copying file');
+        await file.stream().pipeTo(writable); // pipeTo closes the stream when done
       }
       events.progress(null, '');
       return finalName;
