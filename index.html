@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TabStudio</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">TabStudio</div>
+      <div class="status" id="status">Not recording</div>
+      <div class="clock" id="clock">00:00:00</div>
+    </header>
+
+    <main class="main">
+      <section class="stage" id="stage">
+        <canvas id="preview"></canvas>
+        <div id="teleprompter" class="teleprompter hidden">
+          <div class="tp-scroll" id="tpScroll"></div>
+        </div>
+        <div class="stage-hint" id="stageHint">Pick a camera and share a tab to see the preview.</div>
+      </section>
+
+      <aside class="panel">
+        <div class="group">
+          <h2>Sources</h2>
+          <label>Camera 1 <select id="cam1"></select></label>
+          <label>Camera 2 <select id="cam2"></select></label>
+          <label>Camera 3 <select id="cam3"></select></label>
+          <label>Microphone <select id="mic"></select></label>
+          <div class="row">
+            <button id="btnShareTab" class="btn">Share tab</button>
+            <button id="btnStopTab" class="btn" disabled>Stop tab</button>
+          </div>
+          <div class="tiny" id="tabInfo">No tab shared.</div>
+        </div>
+
+        <div class="group">
+          <h2>Layout <span class="tiny">keys F, P, T</span></h2>
+          <div class="row seg" id="layoutSeg">
+            <button data-layout="full" class="seg-btn active">Full camera</button>
+            <button data-layout="pip" class="seg-btn">Picture in picture</button>
+            <button data-layout="tab" class="seg-btn">Tab only</button>
+          </div>
+          <h2>Active camera <span class="tiny">keys 1, 2, 3</span></h2>
+          <div class="row seg" id="camSeg">
+            <button data-cam="0" class="seg-btn active">1</button>
+            <button data-cam="1" class="seg-btn">2</button>
+            <button data-cam="2" class="seg-btn">3</button>
+          </div>
+          <label>PiP shape
+            <select id="pipShape">
+              <option value="rect">Rectangle</option>
+              <option value="rounded" selected>Rounded</option>
+              <option value="circle">Circle</option>
+            </select>
+          </label>
+          <div class="tiny">Drag the camera window to move it. Drag its corner to resize.</div>
+        </div>
+
+        <div class="group">
+          <h2>Audio</h2>
+          <label class="slider">
+            <span>Mic <b id="micVal">100%</b></span>
+            <input type="range" id="micGain" min="0" max="200" value="100" />
+            <div class="meter"><div id="micMeter"></div></div>
+          </label>
+          <label class="slider">
+            <span>Tab sound <b id="tabVal">100%</b></span>
+            <input type="range" id="tabGain" min="0" max="200" value="100" />
+            <div class="meter"><div id="tabMeter"></div></div>
+          </label>
+        </div>
+
+        <div class="group">
+          <h2>Recording</h2>
+          <label>Resolution
+            <select id="resolution">
+              <option value="1080">1080p</option>
+              <option value="2160">4K</option>
+            </select>
+          </label>
+          <label>Frame rate
+            <select id="fps">
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </label>
+          <label>Codec
+            <select id="codec">
+              <option value="avc">H.264 (plays everywhere)</option>
+              <option value="hevc">HEVC (smaller file)</option>
+            </select>
+          </label>
+          <label>Quality <b id="qualityVal">High</b>
+            <input type="range" id="quality" min="1" max="5" value="3" />
+          </label>
+          <div class="tiny" id="bitrateInfo"></div>
+          <label><input type="checkbox" id="standardMp4" checked /> Convert to standard MP4 when done</label>
+          <div class="row">
+            <button id="btnFolder" class="btn">Choose save folder</button>
+          </div>
+          <div class="tiny" id="folderInfo">No folder chosen. Files will download instead.</div>
+          <div class="tiny">Keys: Space = record, pause, resume. S = stop. Click the preview first so keys reach the app.</div>
+        </div>
+
+        <div class="group">
+          <h2>Teleprompter</h2>
+          <textarea id="tpText" rows="4" placeholder="Paste your script here. It shows over the preview and is never recorded."></textarea>
+          <div class="row">
+            <button id="btnTp" class="btn">Show</button>
+            <label class="inline">Speed <input type="range" id="tpSpeed" min="0" max="100" value="30" /></label>
+          </div>
+        </div>
+
+        <div class="group recover hidden" id="recoverGroup">
+          <h2>Unfinished recording found</h2>
+          <div class="tiny" id="recoverInfo"></div>
+          <div class="row">
+            <button id="btnRecover" class="btn">Recover it</button>
+            <button id="btnDiscard" class="btn danger">Discard</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="bottombar">
+      <button id="btnRecord" class="btn big rec">Record <span class="tiny">(Space)</span></button>
+      <button id="btnPause" class="btn big" disabled>Pause</button>
+      <button id="btnStop" class="btn big" disabled>Stop</button>
+      <div id="progress" class="progress hidden"><div id="progressBar"></div><span id="progressText"></span></div>
+      <div id="log" class="log"></div>
+    </footer>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
