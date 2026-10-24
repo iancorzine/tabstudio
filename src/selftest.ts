@@ -94,4 +94,9 @@ async function run() {
   v.src = url;
 }
 
-run().catch((e) => say('RESULT: FAIL ' + (e instanceof Error ? e.stack ?? e.message : String(e))));
+const btn = document.getElementById('run') as HTMLButtonElement;
+btn.addEventListener('click', () => {
+  btn.disabled = true;
+  out.textContent = '';
+  run().catch((e) => say('RESULT: FAIL ' + (e instanceof Error ? e.stack ?? e.message : String(e))));
+});
