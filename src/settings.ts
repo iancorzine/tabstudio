@@ -13,7 +13,7 @@ export interface Settings {
   micGain: number;
   tabGain: number;
   pipShape: PipShape;
-  pip: { x: number; y: number; w: number }; // fractions of frame width/height; w is a fraction of width
+  pip: { x: number; y: number; w: number; h: number; px: number; py: number; pw: number }; // see PipRect in compositor.ts
   tpSpeed: number;
   tpText: string;
 }
@@ -31,7 +31,7 @@ export const defaults: Settings = {
   micGain: 1,
   tabGain: 1,
   pipShape: 'rounded',
-  pip: { x: 0.72, y: 0.66, w: 0.25 },
+  pip: { x: 0.72, y: 0.66, w: 0.25, h: 0, px: 0.72, py: 0.66, pw: 0.25 },
   tpSpeed: 30,
   tpText: '',
 };
@@ -40,7 +40,9 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(defaults);
-    return { ...structuredClone(defaults), ...JSON.parse(raw) };
+    const s = { ...structuredClone(defaults), ...JSON.parse(raw) } as Settings;
+    if (typeof s.pip.pw !== 'number') s.pip = { x: s.pip.x, y: s.pip.y, w: s.pip.w, h: 0, px: s.pip.x, py: s.pip.y, pw: s.pip.w };
+    return s;
   } catch {
     return structuredClone(defaults);
   }

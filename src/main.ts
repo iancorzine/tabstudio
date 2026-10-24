@@ -310,6 +310,7 @@ function bind() {
     saveSettings(settings);
   });
   compositor.pip = { ...settings.pip };
+  $('btnResetPip').addEventListener('click', () => compositor.resetPip());
   let pipSaveTimer = 0;
   compositor.onPipChange = (pip) => {
     settings.pip = { ...pip };

@@ -42,11 +42,25 @@ class SourceReader {
   }
 }
 
+/**
+ * The camera window has two rectangles, both in fractions of the frame:
+ * the visible window (x, y, w, h) and the picture behind it (px, py, pw; its height
+ * follows the camera's aspect ratio). Dragging an edge changes only the window, which
+ * crops the picture. Dragging a corner scales both. h = 0 means "same height as the picture".
+ */
 export interface PipRect {
-  x: number; // fraction of frame width, left edge
-  y: number; // fraction of frame height, top edge
-  w: number; // fraction of frame width
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  px: number;
+  py: number;
+  pw: number;
 }
+
+export const DEFAULT_PIP: PipRect = { x: 0.72, y: 0.66, w: 0.25, h: 0, px: 0.72, py: 0.66, pw: 0.25 };
+
+export type PipHit = 'move' | 'corner' | 'left' | 'right' | 'top' | 'bottom';
 
 export class Compositor {
   readonly canvas: HTMLCanvasElement;
@@ -60,7 +74,7 @@ export class Compositor {
 
   layout: Layout = 'full';
   activeCam = 0;
-  pip: PipRect = { x: 0.72, y: 0.66, w: 0.25 };
+  pip: PipRect = { ...DEFAULT_PIP };
   pipShape: PipShape = 'rounded';
 
   /** Called after every composite with the wall-clock time in seconds. */
@@ -147,29 +161,62 @@ export class Compositor {
     // Picture in picture: tab behind, camera in front.
     if (tab) this.drawContain(tab, 0, 0, W, H);
     if (cam) {
-      const r = this.pipPixels(cam);
+      this.ensurePipHeight();
+      const r = this.pipPixels();
+      const p = this.picturePixels();
       ctx.save();
       ctx.beginPath();
       if (this.pipShape === 'circle') {
-        ctx.arc(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) / 2, 0, Math.PI * 2);
+        ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2);
       } else if (this.pipShape === 'rounded') {
-        ctx.roundRect(r.x, r.y, r.w, r.h, Math.round(r.w * 0.06));
+        ctx.roundRect(r.x, r.y, r.w, r.h, Math.round(Math.min(r.w, r.h) * 0.08));
       } else {
         ctx.rect(r.x, r.y, r.w, r.h);
       }
       ctx.clip();
-      this.drawCover(cam, r.x, r.y, r.w, r.h);
+      this.drawCover(cam, p.x, p.y, p.w, p.h);
       ctx.restore();
     }
   }
 
-  /** PiP rectangle in frame pixels, with its height from the camera's aspect ratio. */
-  pipPixels(frame?: VideoFrame | null) {
-    const f = frame ?? this.cams[this.activeCam]?.latest ?? null;
-    const aspect = this.pipShape === 'circle' ? 1 : f ? f.displayWidth / f.displayHeight : 16 / 9;
-    const w = this.pip.w * this.width;
-    const h = w / aspect;
-    return { x: this.pip.x * this.width, y: this.pip.y * this.height, w, h };
+  /** Camera aspect ratio (width / height), 16:9 until the first frame arrives. */
+  private camAspect() {
+    const f = this.cams[this.activeCam]?.latest ?? null;
+    return f ? f.displayWidth / f.displayHeight : 16 / 9;
+  }
+
+  /** Picture height as a fraction of frame height. */
+  private pictureH(pw = this.pip.pw) {
+    return ((pw * this.width) / this.camAspect()) / this.height;
+  }
+
+  private ensurePipHeight() {
+    const ph = this.pictureH();
+    if (this.pip.h <= 0) this.pip.h = ph;
+    // A camera with a different shape can leave the window taller than its picture.
+    const maxH = this.pip.py + ph - this.pip.y;
+    if (this.pip.h > maxH) this.pip.h = Math.max(0.02, maxH);
+  }
+
+  /** Visible window in frame pixels. */
+  pipPixels() {
+    const h = this.pip.h > 0 ? this.pip.h : this.pictureH();
+    return { x: this.pip.x * this.width, y: this.pip.y * this.height, w: this.pip.w * this.width, h: h * this.height };
+  }
+
+  /** Picture behind the window in frame pixels. */
+  private picturePixels() {
+    return {
+      x: this.pip.px * this.width,
+      y: this.pip.py * this.height,
+      w: this.pip.pw * this.width,
+      h: this.pictureH() * this.height,
+    };
+  }
+
+  resetPip() {
+    this.pip = { ...DEFAULT_PIP };
+    this.onPipChange?.(this.pip);
   }
 
   private drawCover(frame: VideoFrame, x: number, y: number, w: number, h: number) {
@@ -192,9 +239,9 @@ export class Compositor {
     this.ctx.drawImage(frame, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   }
 
-  // ---- Pointer handling for moving and resizing the PiP window on the preview ----
+  // ---- Pointer handling for moving, resizing, and cropping the camera window on the preview ----
 
-  private drag: { mode: 'move' | 'resize'; startX: number; startY: number; pip: PipRect } | null = null;
+  private drag: { mode: PipHit; startX: number; startY: number; pip: PipRect } | null = null;
 
   private toFrame(ev: PointerEvent) {
     const rect = this.canvas.getBoundingClientRect();
@@ -204,14 +251,32 @@ export class Compositor {
     };
   }
 
-  private hit(ev: PointerEvent): 'move' | 'resize' | null {
+  private hit(ev: PointerEvent): PipHit | null {
     if (this.layout !== 'pip' || !this.cams[this.activeCam]) return null;
     const p = this.toFrame(ev);
     const r = this.pipPixels();
-    if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return null;
-    const grip = Math.max(24, r.w * 0.18);
-    if (p.x > r.x + r.w - grip && p.y > r.y + r.h - grip) return 'resize';
+    const grip = Math.max(16, Math.min(r.w, r.h) * 0.12);
+    if (p.x < r.x - grip / 2 || p.x > r.x + r.w + grip / 2 || p.y < r.y - grip / 2 || p.y > r.y + r.h + grip / 2) return null;
+    const nearLeft = p.x < r.x + grip;
+    const nearRight = p.x > r.x + r.w - grip;
+    const nearTop = p.y < r.y + grip;
+    const nearBottom = p.y > r.y + r.h - grip;
+    if ((nearLeft || nearRight) && (nearTop || nearBottom)) return 'corner';
+    if (nearLeft) return 'left';
+    if (nearRight) return 'right';
+    if (nearTop) return 'top';
+    if (nearBottom) return 'bottom';
     return 'move';
+  }
+
+  private cursorFor(h: PipHit | null) {
+    switch (h) {
+      case 'move': return 'grab';
+      case 'corner': return 'nwse-resize';
+      case 'left': case 'right': return 'ew-resize';
+      case 'top': case 'bottom': return 'ns-resize';
+      default: return '';
+    }
   }
 
   private installPointerHandlers() {
@@ -221,22 +286,16 @@ export class Compositor {
         const p = this.toFrame(ev);
         const dx = (p.x - this.drag.startX) / this.width;
         const dy = (p.y - this.drag.startY) / this.height;
-        if (this.drag.mode === 'move') {
-          this.pip = { ...this.pip, x: this.drag.pip.x + dx, y: this.drag.pip.y + dy };
-        } else {
-          this.pip = { ...this.pip, w: this.drag.pip.w + dx };
-        }
-        this.clampPip();
+        this.applyDrag(this.drag.mode, this.drag.pip, dx, dy);
         this.onPipChange?.(this.pip);
         return;
       }
-      const h = this.hit(ev);
-      c.classList.toggle('grab', h === 'move');
-      c.classList.toggle('resize', h === 'resize');
+      c.style.cursor = this.cursorFor(this.hit(ev));
     });
     c.addEventListener('pointerdown', (ev) => {
       const h = this.hit(ev);
       if (!h) return;
+      this.ensurePipHeight();
       const p = this.toFrame(ev);
       this.drag = { mode: h, startX: p.x, startY: p.y, pip: { ...this.pip } };
       c.setPointerCapture(ev.pointerId);
@@ -255,15 +314,48 @@ export class Compositor {
     c.addEventListener('pointercancel', end);
   }
 
-  private clampPip() {
-    const minW = 0.1;
-    const maxW = 0.6;
-    this.pip.w = Math.min(maxW, Math.max(minW, this.pip.w));
-    const r = this.pipPixels();
-    const maxX = 1 - r.w / this.width;
-    const maxY = 1 - r.h / this.height;
-    this.pip.x = Math.min(Math.max(0, this.pip.x), Math.max(0, maxX));
-    this.pip.y = Math.min(Math.max(0, this.pip.y), Math.max(0, maxY));
+  /** Apply a drag of (dx, dy) frame fractions to the window saved at the start of the drag. */
+  private applyDrag(mode: PipHit, start: PipRect, dx: number, dy: number) {
+    const minW = 0.06;
+    const minH = (minW * this.width) / this.height;
+    const n: PipRect = { ...start };
+    const ph0 = this.pictureH(start.pw);
+
+    if (mode === 'move') {
+      n.x = start.x + dx;
+      n.y = start.y + dy;
+      n.px = start.px + dx;
+      n.py = start.py + dy;
+    } else if (mode === 'corner') {
+      // Scale window and picture together about the window's top-left corner.
+      const k = Math.max(minW / start.w, (start.w + dx) / start.w);
+      n.w = start.w * k;
+      n.h = start.h * k;
+      n.pw = start.pw * k;
+      n.px = start.x + (start.px - start.x) * k;
+      n.py = start.y + (start.py - start.y) * k;
+    } else if (mode === 'left') {
+      const x = Math.min(Math.max(start.px, start.x + dx), start.x + start.w - minW);
+      n.w = start.w - (x - start.x);
+      n.x = x;
+    } else if (mode === 'right') {
+      n.w = Math.min(Math.max(minW, start.w + dx), start.px + start.pw - start.x);
+    } else if (mode === 'top') {
+      const y = Math.min(Math.max(start.py, start.y + dy), start.y + start.h - minH);
+      n.h = start.h - (y - start.y);
+      n.y = y;
+    } else if (mode === 'bottom') {
+      n.h = Math.min(Math.max(minH, start.h + dy), start.py + ph0 - start.y);
+    }
+
+    // Keep the window inside the frame by shifting window and picture together.
+    const shiftX = Math.min(0, -n.x) + Math.min(0, 1 - (n.x + n.w));
+    const shiftY = Math.min(0, -n.y) + Math.min(0, 1 - (n.y + n.h));
+    n.x += shiftX;
+    n.px += shiftX;
+    n.y += shiftY;
+    n.py += shiftY;
+    this.pip = n;
   }
 
   destroy() {
