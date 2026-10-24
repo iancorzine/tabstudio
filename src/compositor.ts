@@ -191,11 +191,33 @@ export class Compositor {
   }
 
   private ensurePipHeight() {
-    const ph = this.pictureH();
-    if (this.pip.h <= 0) this.pip.h = ph;
-    // A camera with a different shape can leave the window taller than its picture.
-    const maxH = this.pip.py + ph - this.pip.y;
-    if (this.pip.h > maxH) this.pip.h = Math.max(0.02, maxH);
+    if (this.pip.h <= 0) this.pip.h = this.pictureH();
+    this.pip = this.normalize(this.pip);
+  }
+
+  /**
+   * Enforce the rules: the window stays inside the picture, the picture is never wider or
+   * taller than the frame, and the window stays fully inside the frame.
+   */
+  private normalize(p: PipRect): PipRect {
+    const n: PipRect = { ...p };
+    const minW = 0.06;
+    const minH = (minW * this.width) / this.height;
+    const aspect = this.camAspect();
+    const maxPw = Math.min(1, (this.height / this.width) * aspect); // picture height must fit the frame too
+    n.pw = Math.min(Math.max(minW, n.pw), maxPw);
+    const ph = this.pictureH(n.pw);
+    n.w = Math.min(Math.max(minW, n.w), n.pw);
+    n.h = Math.min(Math.max(minH, n.h > 0 ? n.h : ph), ph);
+    n.x = Math.min(Math.max(n.x, n.px), n.px + n.pw - n.w);
+    n.y = Math.min(Math.max(n.y, n.py), n.py + ph - n.h);
+    const shiftX = n.x < 0 ? -n.x : n.x + n.w > 1 ? 1 - (n.x + n.w) : 0;
+    const shiftY = n.y < 0 ? -n.y : n.y + n.h > 1 ? 1 - (n.y + n.h) : 0;
+    n.x += shiftX;
+    n.px += shiftX;
+    n.y += shiftY;
+    n.py += shiftY;
+    return n;
   }
 
   /** Visible window in frame pixels. */
@@ -328,7 +350,9 @@ export class Compositor {
       n.py = start.py + dy;
     } else if (mode === 'corner') {
       // Scale window and picture together about the window's top-left corner.
-      const k = Math.max(minW / start.w, (start.w + dx) / start.w);
+      const maxPw = Math.min(1, (this.height / this.width) * this.camAspect());
+      const kMax = Math.min(1 / start.w, 1 / Math.max(start.h, 1e-6), maxPw / start.pw);
+      const k = Math.min(kMax, Math.max(minW / start.w, (start.w + dx) / start.w));
       n.w = start.w * k;
       n.h = start.h * k;
       n.pw = start.pw * k;
@@ -348,14 +372,7 @@ export class Compositor {
       n.h = Math.min(Math.max(minH, start.h + dy), start.py + ph0 - start.y);
     }
 
-    // Keep the window inside the frame by shifting window and picture together.
-    const shiftX = Math.min(0, -n.x) + Math.min(0, 1 - (n.x + n.w));
-    const shiftY = Math.min(0, -n.y) + Math.min(0, 1 - (n.y + n.h));
-    n.x += shiftX;
-    n.px += shiftX;
-    n.y += shiftY;
-    n.py += shiftY;
-    this.pip = n;
+    this.pip = this.normalize(n);
   }
 
   destroy() {
