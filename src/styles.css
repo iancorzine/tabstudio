@@ -72,3 +72,16 @@ textarea { resize: vertical; }
 .progress > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .recover { border-color: #f5a623; }
 .recover.hidden { display: none; }
+
+/* Desktop gate (phones, tablets, non-Mac computers) */
+html.gated, html.gated body { height: auto; min-height: 100%; }
+.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
+.gate[hidden] { display: none; }
+.gate-card { max-width: 520px; width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; }
+.gate-brand { font-weight: 600; letter-spacing: 0.3px; color: var(--muted); }
+.gate-card h1 { margin: 0; font-size: 24px; line-height: 1.2; }
+.gate-card p { margin: 0; font-size: 16px; line-height: 1.5; }
+.gate-addr { font-size: 18px; }
+.gate-addr b { color: var(--accent); user-select: all; }
+.gate-small a { color: var(--muted); }
+html.gated #app { display: none !important; }

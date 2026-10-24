@@ -459,6 +459,7 @@ function bind() {
 }
 
 async function init() {
+  if ((window as unknown as { __tsGate?: string }).__tsGate) return;
   if (!('MediaStreamTrackProcessor' in window) || !('VideoEncoder' in window) || !navigator.mediaDevices?.getDisplayMedia) {
     log('This app needs a current version of Google Chrome on a desktop computer.', true);
     return;

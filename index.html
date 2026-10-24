@@ -4,6 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TabStudio</title>
+  <script>
+    // Desktop gate. TabStudio needs Google Chrome on a Mac: tab capture and the video encoder are not available on phones or tablets.
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isIPad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isMobile = isIPad || /iPhone|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua) || !!(navigator.userAgentData && navigator.userAgentData.mobile);
+      var isMac = /Macintosh|Mac OS X/.test(ua) && !isIPad;
+      var tryAnyway = false;
+      try { tryAnyway = sessionStorage.getItem('tabstudio-try-anyway') === '1'; } catch (e) {}
+      window.__tsGate = isMobile ? 'mobile' : (!isMac && !tryAnyway ? 'notmac' : '');
+      if (window.__tsGate) document.documentElement.className += ' gated';
+    })();
+  </script>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
@@ -135,6 +148,30 @@
       <div id="log" class="log"></div>
     </footer>
   </div>
+  <div id="gate" class="gate" hidden>
+    <div class="gate-card">
+      <div class="gate-brand">TabStudio</div>
+      <h1 id="gateTitle">TabStudio is a desktop app.</h1>
+      <p id="gateText">It runs in Google Chrome on a Mac. Phones and tablets cannot share a browser tab or encode video the way TabStudio needs, so it does not run here.</p>
+      <p class="gate-addr">On your Mac, open <b>tabstudio.iantools.com</b></p>
+      <p class="gate-small" id="gateSmall"></p>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var g = window.__tsGate; if (!g) return;
+      var el = document.getElementById('gate'); el.hidden = false;
+      var app = document.getElementById('app'); if (app) app.hidden = true;
+      if (g === 'notmac') {
+        document.getElementById('gateTitle').textContent = 'TabStudio is built for Apple Macs.';
+        document.getElementById('gateText').textContent = 'It is built and tested only in Google Chrome on a Mac. On other computers it may not record correctly.';
+        var small = document.getElementById('gateSmall');
+        var a = document.createElement('a'); a.href = '#'; a.textContent = 'Try it anyway';
+        a.onclick = function (e) { e.preventDefault(); try { sessionStorage.setItem('tabstudio-try-anyway', '1'); } catch (err) {} location.reload(); };
+        small.appendChild(a);
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
